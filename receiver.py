@@ -11,19 +11,18 @@ def receive_pixel_coordinates():
     data = request.json
     x = data.get('x')
     y = data.get('y')
-
+    
     if x is not None and y is not None:
-        middle_pixel = 320  # Set your middle pixel value here
 
-        if x < middle_pixel:
+        if x == 'left':
             # Press left button
             press_key('left')
             print("Left Button Pressed")
-        elif x > middle_pixel:
+        elif x == 'right':
             # Press right button
             press_key('right')
             print("Right Button Pressed")
-        else:
+        elif x == 'up':
             # Press forward button
             press_key('up')
             print("Forward Button Pressed")
