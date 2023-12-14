@@ -1,49 +1,89 @@
+import pyrealsense2 as rs
+import numpy as np
 import cv2
+from ultralytics import YOLO
 import requests
-import random
-# Function to detect faces and get the middle pixel coordinates
-def detect_face(image):
-    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.3, minNeighbors=5)
 
-    if len(faces) > 0:
-        # Take the first detected face
-        x, y, w, h = faces[0]
-        middle_x = x + w // 2
-        middle_y = y + h // 2
-        return middle_x, middle_y
-    else:
-        return None
-
-# Function to send pixel coordinates through API
-def send_pixel_coordinates(x, y):
+def send_action(x):
     api_url = "http://127.0.0.1:5000/"  # Replace with your actual API endpoint
-    payload = {"x": x, "y": y}
+    payload = {"action": x}
     requests.post(api_url, json=payload)
 
-# Main loop to capture frames, detect faces, and send pixel coordinates
-# cap = cv2.VideoCapture(0)  # 0 for default camera, you might need to change it
+#load the YOLOv8 model
+model = YOLO('yolov8n.pt')
 
-while True:
-    #ret, frame = cap.read()
-    # if not ret:
-    #     break
 
-    # face_coordinates = detect_face(frame)
+# Configure depth and color streams
+pipeline = rs.pipeline()
+config = rs.config()
 
-    if False:#face_coordinates:
-        x, y = face_coordinates
-        send_pixel_coordinates(x, y)
-    else:
-        x=320+random.randint(-1,1)
-        y=0
-        send_pixel_coordinates(x, y)
+# Get device product line for setting a supporting resolution
+pipeline_wrapper = rs.pipeline_wrapper(pipeline)
+pipeline_profile = config.resolve(pipeline_wrapper)
+device = pipeline_profile.get_device()
+device_product_line = str(device.get_info(rs.camera_info.product_line))
+
+found_rgb = False
+for s in device.sensors:
+    if s.get_info(rs.camera_info.name) == 'RGB Camera':
+        found_rgb = True
+        break
+if not found_rgb:
+    print("The demo requires Depth camera with Color sensor")
+    exit(0)
+
+config.enable_stream(rs.stream.depth, 640, 480, rs.format.z16, 30)
+
+if device_product_line == 'L500':
+    config.enable_stream(rs.stream.color, 960, 540, rs.format.bgr8, 30)
+else:
+    config.enable_stream(rs.stream.color, 640, 480, rs.format.bgr8, 30)
+
+# Start streaming
+pipeline.start(config)
+
+try:
+    while True:
+
+        # Wait for a coherent pair of frames: depth and color
+        frames = pipeline.wait_for_frames()
+        depth_frame = frames.get_depth_frame()
+        color_frame = frames.get_color_frame()
+        if not depth_frame or not color_frame:
+            continue
+
+        # Convert images to numpy arrays
+        depth_image = np.asanyarray(depth_frame.get_data())
+        color_image = np.asanyarray(color_frame.get_data())
+
+
+        #deal with color image
+        # Run YOLOv8 inference on the frame
+        results = model(color_image)
+
+        #Visuallize the results on the frame
+        color_image = results[0].plot()
+
+        # Apply colormap on depth image (image must be converted to 8-bit per pixel first)
+        depth_colormap = cv2.applyColorMap(cv2.convertScaleAbs(depth_image, alpha=0.03), cv2.COLORMAP_JET)
+
+        depth_colormap_dim = depth_colormap.shape
+        color_colormap_dim = color_image.shape
+
+        # If depth and color resolutions are different, resize color image to match depth image for display
+        if depth_colormap_dim != color_colormap_dim:
+            resized_color_image = cv2.resize(color_image, dsize=(depth_colormap_dim[1], depth_colormap_dim[0]), interpolation=cv2.INTER_AREA)
+            images = np.hstack((resized_color_image, depth_colormap))
+        else:
+            images = np.hstack((color_image, depth_colormap))
+
+        # Show images
         
-    # cv2.imshow('Frame', frame)
+        cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
+        cv2.imshow('RealSense', images)
+        # cv2.waitKey(1)
 
-    # if cv2.waitKey(1) & 0xFF == ord('q'):
-    #     break
+finally:
 
-# cap.release()
-# cv2.destroyAllWindows()
+    # Stop streaming
+    pipeline.stop()
