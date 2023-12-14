@@ -4,7 +4,18 @@ import cv2
 from ultralytics import YOLO
 from simple_pid import PID
 
-
+# post request to move pioneer
+def post_request(direction = 'right'):
+    data = {
+        'x': direction,
+    }
+    server_url = 'http://192.168.67.133:5000'
+    response = requests.post(server_url, json=data)
+    if response.status_code == 200:
+        print(f"Action '{direction}' sent successfully.")
+    else:
+        print(f"Failed to send action '{direction}'. Server returned status code {response.status_code}")
+    return 
 
 # Returns the distance of the person from the centerline normed by the picture center line, >0=right, <0=left
 # YOLOV8 docs for result attributes
