@@ -17,17 +17,26 @@ def post_request(direction = 'right'):
         print(f"Failed to send action '{direction}'. Server returned status code {response.status_code}")
     return 
 
-# Returns the distance of the person from the centerline normed by the picture center line, >0=right, <0=left
+# Returns the x position of the person center point normed to the picture width (0 to 1)
 # YOLOV8 docs for result attributes
-def calculateDirection(results):
-    if(results[0]):
-        centerLine = 0.5
-        bounding_box_coordinates = results[0].boxes[0].xywhn
+def calculateXPosition(results):
+    for res in results:
+        if(res.b)
+        print(res)
+    person = results[0]    
+    if(person):
+        bounding_box_coordinates = person.boxes[0].xywhn
         x_center = float(bounding_box_coordinates[0][0])
-        distance = centerLine - x_center
-        return distance
+        return x_center
     else:
         return -1
+
+# Returns the distance of the person from the centerline normed by the picture center line, >0=right, <0=left
+def calculateDistance(xPosition):
+    distance = 0
+    centerPosition = 0.5
+    distance = xPosition - centerPosition
+    return distance
 
 pid = PID(1, 0.1, 0.05, setpoint=0)
 
@@ -50,7 +59,7 @@ while cap.isOpened():
         #Visuallize the results on the frame
         annotated_frame = results[0].plot()
 
-        normDistance = calculateDirection(results)
+        normDistance = calculateDistance(calculateXPosition(results))
         controllerOutput = pid(normDistance)
 
         annotated_frame = cv2.putText(annotated_frame, f"Distance: {round(normDistance, 5)}", (30,30), 1, 2, (0,0,255))
